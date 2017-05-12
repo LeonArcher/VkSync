@@ -14,3 +14,4 @@ app/proguard-rules.pro
 gradle.properties
 build.gradle
 gradlew
+vksdk_library/

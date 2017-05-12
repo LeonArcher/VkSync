@@ -13,4 +13,6 @@
     <string name="permission_rationale">"Contacts permissions are needed for providing email
         completions."
     </string>
+    <integer name="com_vk_sdk_AppId">6025664</integer>
+    <string name="friend_list_photo_description">User photo</string>
 </resources>

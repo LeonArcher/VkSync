@@ -1,4 +1,4 @@
-package com.streamdata.apps.vksync;
+package com.streamdata.apps.vksync.models;
 
 import android.graphics.Bitmap;
 

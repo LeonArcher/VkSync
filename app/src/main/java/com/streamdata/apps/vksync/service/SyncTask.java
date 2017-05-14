@@ -1,8 +1,12 @@
 package com.streamdata.apps.vksync.service;
 
+import android.content.ContentProviderOperation;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Handler;
+import android.provider.ContactsContract;
+import android.support.annotation.Nullable;
 import android.support.annotation.WorkerThread;
 import android.util.Log;
 
@@ -16,6 +20,7 @@ import com.vk.sdk.api.VKResponse;
 import com.vk.sdk.api.model.VKApiUserFull;
 import com.vk.sdk.api.model.VKUsersArray;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -30,16 +35,19 @@ class SyncTask implements Runnable {
     private final SyncCallback<List<User>> resultCallback;
     private final SyncCallback<Exception> errorCallback;
     private final Handler uiHandler;
+    private final Context serviceContext;
 
     public SyncTask(SyncCallback<String> progressCallback,
                     SyncCallback<List<User>> resultCallback,
                     SyncCallback<Exception> errorCallback,
-                    Handler uiHandler) {
+                    Handler uiHandler,
+                    Context serviceContext) {
 
         this.errorCallback = errorCallback;
         this.progressCallback = progressCallback;
         this.resultCallback = resultCallback;
         this.uiHandler = uiHandler;
+        this.serviceContext = serviceContext;
     }
 
     @Override
@@ -54,7 +62,19 @@ class SyncTask implements Runnable {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        parseResponse(response);
+                        List<User> friends = parseResponse(response);
+
+                        for (int idx = 0; idx < friends.size(); idx++) {
+                            User friend = friends.get(idx);
+
+                            uiHandler.post(new SyncCallbackRunnable<>(
+                                    progressCallback,
+                                    String.format(Locale.US, "Adding friends to phonebook: %d of %d", idx, friends.size())
+                            ));
+                            addContactToSystemPhonebook(friend);
+                        }
+
+                        uiHandler.post(new SyncCallbackRunnable<>(resultCallback, friends));
                     }
                 }).start();
             }
@@ -83,7 +103,7 @@ class SyncTask implements Runnable {
     }
 
     @WorkerThread
-    private void parseResponse(VKResponse response) {
+    private List<User> parseResponse(VKResponse response) {
         // Do complete stuff
         Log.d(SyncService.LOG_TAG, "Request completed.");
 
@@ -101,6 +121,16 @@ class SyncTask implements Runnable {
 
             VKApiUserFull friendFull = friendsArray.get(idx);
 
+            // check if user has a mobile phone number
+            String mobilePhone = normalizePhoneNumber(friendFull.mobile_phone);
+
+            if (mobilePhone == null) {
+                if (!friendFull.mobile_phone.isEmpty()) {
+                    Log.d(SyncService.LOG_TAG, String.format("Invalid mobile phone number: %s", friendFull.mobile_phone));
+                }
+                continue;
+            }
+
             Bitmap photo = null;
             try {
                 URL url = new URL(friendFull.photo_100);
@@ -113,7 +143,7 @@ class SyncTask implements Runnable {
             User friendFullParsed = new User(
                     friendFull.first_name,
                     friendFull.last_name,
-                    friendFull.mobile_phone,
+                    mobilePhone,
                     photo
             );
             friends.add(friendFullParsed);
@@ -121,7 +151,63 @@ class SyncTask implements Runnable {
             Log.d(SyncService.LOG_TAG, friendFullParsed.toString());
         }
 
-        // TODO: handle friends into phone book
-        uiHandler.post(new SyncCallbackRunnable<>(resultCallback, friends));
+        return friends;
+    }
+
+    /**
+     * Check if text phone number is valid
+     * @param number string candidate for phone number
+     * @return modified phone number if number is phone number, null otherwise
+     */
+    @Nullable private String normalizePhoneNumber(String number) {
+        String cleanNumber = number.replaceAll("[^\\d+]", "");
+
+        if (cleanNumber.matches("^[+]?[0-9]{10,12}$")) {
+            return cleanNumber;
+        }
+        return null;
+    }
+
+    @WorkerThread
+    private void addContactToSystemPhonebook(User user) {
+
+        String displayName = user.getFullName();
+
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        user.getPhoto().compress(Bitmap.CompressFormat.PNG, 100, stream);
+        byte[] photoByteArray = stream.toByteArray();
+
+        ArrayList<ContentProviderOperation> ops = new ArrayList<>();
+
+        ops.add(ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                .build());
+
+        ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, displayName)
+                .build());
+
+        ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, user.getMobilePhone())
+                .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+                .build());
+
+        ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, photoByteArray)
+                .build());
+
+        try {
+            serviceContext.getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
+        } catch (Exception ex) {
+            Log.e(SyncService.LOG_TAG, "Contact import error.", ex);
+            uiHandler.post(new SyncCallbackRunnable<>(errorCallback, ex));
+        }
     }
 }

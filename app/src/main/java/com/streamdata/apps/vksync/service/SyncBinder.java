@@ -39,6 +39,12 @@ public class SyncBinder extends Binder {
         }
 
         service.executor = Executors.newSingleThreadExecutor();
-        service.executor.execute(new SyncTask(progressCallback, resultCallback, errorCallback, uiHandler));
+        service.executor.execute(new SyncTask(
+                progressCallback,
+                resultCallback,
+                errorCallback,
+                uiHandler,
+                service.getApplicationContext()
+        ));
     }
 }

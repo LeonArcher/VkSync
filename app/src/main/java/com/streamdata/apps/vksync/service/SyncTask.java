@@ -3,6 +3,7 @@ package com.streamdata.apps.vksync.service;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Handler;
+import android.support.annotation.WorkerThread;
 import android.util.Log;
 
 import com.streamdata.apps.vksync.models.User;
@@ -48,38 +49,13 @@ class SyncTask implements Runnable {
 
         currentRequest.executeWithListener(new VKRequest.VKRequestListener() {
             @Override
-            public void onComplete(VKResponse response) {
-                // Do complete stuff
-                Log.d(SyncService.LOG_TAG, "Request completed.");
-
-                List<User> friends = new ArrayList<>();
-
-                // Parsing friends' data
-                VKUsersArray friendsArray = (VKUsersArray) response.parsedModel;
-
-                for (VKApiUserFull friendFull : friendsArray) {
-
-                    Bitmap photo = null;
-                    try {
-                        URL url = new URL(friendFull.photo_100);
-                        photo = BitmapFactory.decodeStream(url.openConnection().getInputStream());
-                    } catch(IOException ex) {
-                        Log.e(SyncService.LOG_TAG, String.format("Unable to load user photo: %s", friendFull.photo_100));
-                        uiHandler.post(new SyncCallbackRunnable<>(errorCallback, ex));
+            public void onComplete(final VKResponse response) {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        parseResponse(response);
                     }
-
-                    User friendFullParsed = new User(
-                            friendFull.first_name,
-                            friendFull.last_name,
-                            friendFull.mobile_phone,
-                            photo
-                    );
-                    friends.add(friendFullParsed);
-
-                    Log.d(SyncService.LOG_TAG, friendFullParsed.toString());
-                }
-
-                // TODO: handle friends into phone book
+                }).start();
             }
             @Override
             public void onError(VKError error) {
@@ -93,5 +69,41 @@ class SyncTask implements Runnable {
                 Log.e(SyncService.LOG_TAG, String.format("Request attempt failed: %d/%d", attemptNumber, totalAttempts));
             }
         });
+    }
+
+    @WorkerThread
+    private void parseResponse(VKResponse response) {
+        // Do complete stuff
+        Log.d(SyncService.LOG_TAG, "Request completed.");
+
+        List<User> friends = new ArrayList<>();
+
+        // Parsing friends' data
+        VKUsersArray friendsArray = (VKUsersArray) response.parsedModel;
+
+        for (VKApiUserFull friendFull : friendsArray) {
+
+            Bitmap photo = null;
+            try {
+                URL url = new URL(friendFull.photo_100);
+                photo = BitmapFactory.decodeStream(url.openConnection().getInputStream());
+            } catch(IOException ex) {
+                Log.e(SyncService.LOG_TAG, String.format("Unable to load user photo: %s", friendFull.photo_100));
+                uiHandler.post(new SyncCallbackRunnable<>(errorCallback, ex));
+            }
+
+            User friendFullParsed = new User(
+                    friendFull.first_name,
+                    friendFull.last_name,
+                    friendFull.mobile_phone,
+                    photo
+            );
+            friends.add(friendFullParsed);
+
+            Log.d(SyncService.LOG_TAG, friendFullParsed.toString());
+        }
+
+        // TODO: handle friends into phone book
+        uiHandler.post(new SyncCallbackRunnable<>(resultCallback, friends));
     }
 }

@@ -1,8 +1,12 @@
 package com.streamdata.apps.vksync;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -14,7 +18,9 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import com.streamdata.apps.vksync.models.User;
+import com.streamdata.apps.vksync.service.SyncBinder;
 import com.streamdata.apps.vksync.service.SyncCallback;
+import com.streamdata.apps.vksync.service.SyncService;
 import com.vk.sdk.VKAccessToken;
 import com.vk.sdk.VKCallback;
 import com.vk.sdk.VKScope;
@@ -30,10 +36,33 @@ public class MainActivity extends AppCompatActivity {
     private List<User> friends = new ArrayList<>();
     private FriendAdapter adapter;
 
+    private Intent serviceIntent;
+    private ServiceConnection serviceConnection;
+    private SyncBinder serviceBinder;
+    private boolean serviceIsBound = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // prepare and start service
+        serviceIntent = new Intent(this, SyncService.class);
+        serviceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                serviceBinder = (SyncBinder) service;
+                serviceIsBound = true;
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                // called only in extreme situations, so we need to duplicate this in onPause
+                serviceIsBound = false;
+            }
+        };
+
+        startService(serviceIntent);
 
         VKSdk.login(this, VKScope.FRIENDS);
 
@@ -52,6 +81,12 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(LOG_TAG, "User passed authorization.");
 
                 // TODO: use SyncService
+                serviceBinder.runSyncProcess(
+                        new SyncProgressReceiver(),
+                        new SyncResultReceiver(),
+                        new SyncErrorReceiver(),
+                        new Handler()
+                );
             }
             @Override
             public void onError(VKError error) {
@@ -74,12 +109,30 @@ public class MainActivity extends AppCompatActivity {
     private class SyncResultReceiver implements SyncCallback<List<User>> {
         @Override
         public void callback(List<User> result) {
+            friends.clear();
+            friends.addAll(result);
+            adapter.notifyDataSetChanged();
         }
     }
 
     private class SyncErrorReceiver implements SyncCallback<Exception> {
         @Override
         public void callback(Exception result) {
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        bindService(serviceIntent, serviceConnection, BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (serviceIsBound) {
+            unbindService(serviceConnection);
+            serviceIsBound = false;
         }
     }
 

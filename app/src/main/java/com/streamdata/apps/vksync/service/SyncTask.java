@@ -20,17 +20,18 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * TODO: Add a class header comment!
  */
 class SyncTask implements Runnable {
-    private final SyncCallback<Float> progressCallback;
+    private final SyncCallback<String> progressCallback;
     private final SyncCallback<List<User>> resultCallback;
     private final SyncCallback<Exception> errorCallback;
     private final Handler uiHandler;
 
-    public SyncTask(SyncCallback<Float> progressCallback,
+    public SyncTask(SyncCallback<String> progressCallback,
                     SyncCallback<List<User>> resultCallback,
                     SyncCallback<Exception> errorCallback,
                     Handler uiHandler) {
@@ -57,16 +58,26 @@ class SyncTask implements Runnable {
                     }
                 }).start();
             }
+
             @Override
             public void onError(VKError error) {
                 // Do error stuff
                 Log.e(SyncService.LOG_TAG, "Request failed.");
                 uiHandler.post(new SyncCallbackRunnable<>(errorCallback, new SyncFatalException(error)));
             }
+
             @Override
             public void attemptFailed(VKRequest request, int attemptNumber, int totalAttempts) {
                 // I don't really believe in progress
                 Log.e(SyncService.LOG_TAG, String.format("Request attempt failed: %d/%d", attemptNumber, totalAttempts));
+            }
+
+            @Override
+            public void onProgress(VKRequest.VKProgressType progressType, long bytesLoaded, long bytesTotal) {
+                uiHandler.post(new SyncCallbackRunnable<>(
+                        progressCallback,
+                        String.format(Locale.US, "Downloading friends: %d%", 100 * bytesLoaded / bytesTotal)
+                ));
             }
         });
     }
@@ -81,7 +92,14 @@ class SyncTask implements Runnable {
         // Parsing friends' data
         VKUsersArray friendsArray = (VKUsersArray) response.parsedModel;
 
-        for (VKApiUserFull friendFull : friendsArray) {
+        for (int idx = 0; idx < friendsArray.size(); idx++) {
+
+            uiHandler.post(new SyncCallbackRunnable<>(
+                    progressCallback,
+                    String.format(Locale.US, "Parsing friends: %d of %d", idx, friendsArray.size())
+            ));
+
+            VKApiUserFull friendFull = friendsArray.get(idx);
 
             Bitmap photo = null;
             try {

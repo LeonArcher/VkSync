@@ -21,7 +21,7 @@ public class SyncBinder extends Binder {
         this.serviceRef = new WeakReference<>(service);
     }
 
-    public void runSyncProcess(SyncCallback<Float> progressCallback,
+    public void runSyncProcess(SyncCallback<String> progressCallback,
                                SyncCallback<List<User>> resultCallback,
                                SyncCallback<Exception> errorCallback,
                                final Handler uiHandler) {

@@ -1,9 +1,13 @@
 package com.streamdata.apps.vksync;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.annotation.TargetApi;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -35,6 +39,9 @@ public class MainActivity extends AppCompatActivity {
 
     private List<User> friends = new ArrayList<>();
     private FriendAdapter adapter;
+    private View progressView;
+    private TextView progressText;
+    private ListView lvFriends;
 
     private Intent serviceIntent;
     private ServiceConnection serviceConnection;
@@ -67,9 +74,13 @@ public class MainActivity extends AppCompatActivity {
         VKSdk.login(this, VKScope.FRIENDS);
 
         // create list view and apply custom list of friends adapter
-        ListView lvFriends = (ListView) findViewById(R.id.friendsList);
+        lvFriends = (ListView) findViewById(R.id.friends_list);
         adapter = new FriendAdapter(this, friends);
         lvFriends.setAdapter(adapter);
+
+        // prepare progress indication
+        progressView = findViewById(R.id.progress_bar);
+        progressText = (TextView) findViewById(R.id.progress_text);
     }
 
     @Override
@@ -87,6 +98,9 @@ public class MainActivity extends AppCompatActivity {
                         new SyncErrorReceiver(),
                         new Handler()
                 );
+
+                progressText.setText("Downloading friends...");
+                showProgress(true);
             }
             @Override
             public void onError(VKError error) {
@@ -98,17 +112,22 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // TODO: implement callback classes
+    /**
+     * Callback classes for handling events from server
+     */
 
-    private class SyncProgressReceiver implements SyncCallback<Float> {
+    private class SyncProgressReceiver implements SyncCallback<String> {
         @Override
-        public void callback(Float result) {
+        public void callback(String result) {
+            progressText.setText(result);
         }
     }
 
     private class SyncResultReceiver implements SyncCallback<List<User>> {
         @Override
         public void callback(List<User> result) {
+            showProgress(false);
+
             friends.clear();
             friends.addAll(result);
             adapter.notifyDataSetChanged();
@@ -118,6 +137,9 @@ public class MainActivity extends AppCompatActivity {
     private class SyncErrorReceiver implements SyncCallback<Exception> {
         @Override
         public void callback(Exception result) {
+            showProgress(false);
+
+            // TODO: handle errors
         }
     }
 
@@ -208,6 +230,52 @@ public class MainActivity extends AppCompatActivity {
                 this.mobilePhone = mobilePhone;
                 this.photo = photo;
             }
+        }
+    }
+
+    /**
+     * Shows the progress UI and hides the login form.
+     */
+    @TargetApi(Build.VERSION_CODES.HONEYCOMB_MR2)
+    private void showProgress(final boolean show) {
+        // On Honeycomb MR2 we have the ViewPropertyAnimator APIs, which allow
+        // for very easy animations. If available, use these APIs to fade-in
+        // the progress spinner.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR2) {
+            int shortAnimTime = getResources().getInteger(android.R.integer.config_shortAnimTime);
+
+            lvFriends.setVisibility(show ? View.GONE : View.VISIBLE);
+            lvFriends.animate().setDuration(shortAnimTime).alpha(
+                    show ? 0 : 1).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    lvFriends.setVisibility(show ? View.GONE : View.VISIBLE);
+                }
+            });
+
+            progressView.setVisibility(show ? View.VISIBLE : View.GONE);
+            progressView.animate().setDuration(shortAnimTime).alpha(
+                    show ? 1 : 0).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    progressView.setVisibility(show ? View.VISIBLE : View.GONE);
+                }
+            });
+
+            progressText.setVisibility(show ? View.VISIBLE : View.GONE);
+            progressText.animate().setDuration(shortAnimTime).alpha(
+                    show ? 1 : 0).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    progressText.setVisibility(show ? View.VISIBLE : View.GONE);
+                }
+            });
+        } else {
+            // The ViewPropertyAnimator APIs are not available, so simply show
+            // and hide the relevant UI components.
+            progressView.setVisibility(show ? View.VISIBLE : View.GONE);
+            progressText.setVisibility(show ? View.VISIBLE : View.GONE);
+            lvFriends.setVisibility(show ? View.GONE : View.VISIBLE);
         }
     }
 }

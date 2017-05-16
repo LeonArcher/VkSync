@@ -3,7 +3,7 @@ package com.streamdata.apps.vksync.service;
 import com.vk.sdk.api.VKError;
 
 /**
- * TODO: Add a class header comment!
+ * Custom exception class for "fatal" errors during synchronization
  */
 public class SyncFatalException extends Exception {
     private final VKError error;

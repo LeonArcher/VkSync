@@ -20,6 +20,7 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.streamdata.apps.vksync.models.User;
 import com.streamdata.apps.vksync.service.SyncBinder;
@@ -139,7 +140,11 @@ public class MainActivity extends AppCompatActivity {
         public void callback(Exception result) {
             showProgress(false);
 
-            // TODO: handle errors
+            Toast.makeText(
+                    getApplicationContext(),
+                    "Error occurred. Try again later.",
+                    Toast.LENGTH_LONG
+            ).show();
         }
     }
 

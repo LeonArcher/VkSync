@@ -1,7 +1,7 @@
 package com.streamdata.apps.vksync.service;
 
 /**
- * TODO: Add a class header comment!
+ * Interface for callback messages from synchronization service
  */
 public interface SyncCallback<T> {
     void callback(T result);

@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * TODO: Add a class header comment!
+ * Main synchronization process task
  */
 class SyncTask implements Runnable {
     private final SyncCallback<String> progressCallback;
@@ -53,7 +53,9 @@ class SyncTask implements Runnable {
     @Override
     public void run() {
         // Request list of friends
-        VKRequest currentRequest = VKApi.friends().get(VKParameters.from(VKApiConst.FIELDS, "id,first_name,last_name,contacts,photo_100"));
+        VKRequest currentRequest = VKApi.friends().get(
+                VKParameters.from(VKApiConst.FIELDS, "id,first_name,last_name,contacts,photo_100")
+        );
         currentRequest.attempts = 10;
 
         currentRequest.executeWithListener(new VKRequest.VKRequestListener() {
@@ -69,7 +71,12 @@ class SyncTask implements Runnable {
 
                             uiHandler.post(new SyncCallbackRunnable<>(
                                     progressCallback,
-                                    String.format(Locale.US, "Adding friends to phonebook: %d of %d", idx, friends.size())
+                                    String.format(
+                                            Locale.US,
+                                            "Adding friends to phonebook: %d of %d",
+                                            idx,
+                                            friends.size()
+                                    )
                             ));
                             addContactToSystemPhonebook(friend);
                         }
@@ -83,20 +90,35 @@ class SyncTask implements Runnable {
             public void onError(VKError error) {
                 // Do error stuff
                 Log.e(SyncService.LOG_TAG, "Request failed.");
-                uiHandler.post(new SyncCallbackRunnable<>(errorCallback, new SyncFatalException(error)));
+                uiHandler.post(new SyncCallbackRunnable<>(
+                        errorCallback,
+                        new SyncFatalException(error))
+                );
             }
 
             @Override
             public void attemptFailed(VKRequest request, int attemptNumber, int totalAttempts) {
                 // I don't really believe in progress
-                Log.e(SyncService.LOG_TAG, String.format("Request attempt failed: %d/%d", attemptNumber, totalAttempts));
+                Log.e(SyncService.LOG_TAG, String.format(
+                        "Request attempt failed: %d/%d",
+                        attemptNumber,
+                        totalAttempts
+                ));
             }
 
             @Override
-            public void onProgress(VKRequest.VKProgressType progressType, long bytesLoaded, long bytesTotal) {
+            public void onProgress(
+                    VKRequest.VKProgressType progressType,
+                    long bytesLoaded,
+                    long bytesTotal
+            ) {
                 uiHandler.post(new SyncCallbackRunnable<>(
                         progressCallback,
-                        String.format(Locale.US, "Downloading friends: %d%", 100 * bytesLoaded / bytesTotal)
+                        String.format(
+                                Locale.US,
+                                "Downloading friends: %d%",
+                                100 * bytesLoaded / bytesTotal
+                        )
                 ));
             }
         });
@@ -126,7 +148,10 @@ class SyncTask implements Runnable {
 
             if (mobilePhone == null) {
                 if (!friendFull.mobile_phone.isEmpty()) {
-                    Log.d(SyncService.LOG_TAG, String.format("Invalid mobile phone number: %s", friendFull.mobile_phone));
+                    Log.d(SyncService.LOG_TAG, String.format(
+                            "Invalid mobile phone number: %s",
+                            friendFull.mobile_phone
+                    ));
                 }
                 continue;
             }
@@ -136,7 +161,10 @@ class SyncTask implements Runnable {
                 URL url = new URL(friendFull.photo_100);
                 photo = BitmapFactory.decodeStream(url.openConnection().getInputStream());
             } catch(IOException ex) {
-                Log.e(SyncService.LOG_TAG, String.format("Unable to load user photo: %s", friendFull.photo_100));
+                Log.e(SyncService.LOG_TAG, String.format(
+                        "Unable to load user photo: %s",
+                        friendFull.photo_100
+                ));
                 uiHandler.post(new SyncCallbackRunnable<>(errorCallback, ex));
             }
 
@@ -184,22 +212,29 @@ class SyncTask implements Runnable {
                 .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
                 .build());
 
+        // saving name
         ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, displayName)
                 .build());
 
+        // saving mobile phone number
         ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                 .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, user.getMobilePhone())
-                .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+                .withValue(ContactsContract.CommonDataKinds.Phone.TYPE,
+                        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
                 .build());
 
+        // saving photo
         ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
                 .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, photoByteArray)
                 .build());
 

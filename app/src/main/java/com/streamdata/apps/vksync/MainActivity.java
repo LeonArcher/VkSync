@@ -70,8 +70,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        startService(serviceIntent);
-
         VKSdk.login(this, VKScope.FRIENDS);
 
         // create list view and apply custom list of friends adapter
@@ -129,6 +127,11 @@ public class MainActivity extends AppCompatActivity {
         public void callback(List<User> result) {
             showProgress(false);
 
+            if (serviceIsBound) {
+                unbindService(serviceConnection);
+                serviceIsBound = false;
+            }
+
             friends.clear();
             friends.addAll(result);
             adapter.notifyDataSetChanged();
@@ -139,6 +142,11 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void callback(Exception result) {
             showProgress(false);
+
+            if (serviceIsBound) {
+                unbindService(serviceConnection);
+                serviceIsBound = false;
+            }
 
             Toast.makeText(
                     getApplicationContext(),
